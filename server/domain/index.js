@@ -35,14 +35,16 @@ module.exports = function(app) {
   };
 
   pg.find = function(name, query, pg, res){
-    if(query){
-      var qs = ' WHERE ';
+      var qs = '';
       // convert query into sql, should be name values
       console.log('query : ' + JSON.stringify(query, null, 2) );
       var i = 0;
       for(var property in query){
+        if(i==0){
+          qs +=  ' WHERE ';
+        }
         if(i>0){
-          qs += ', ';
+          qs += ' AND ';
         }
         if(isNaN(query[property])) {
           qs += property + ' LIKE \'%' + query[property] + '%\'';
@@ -72,21 +74,6 @@ module.exports = function(app) {
           res.send("Error " + err);
         }
       });
-    } else {
-      pg.connect(connectionString, function(err, client, done) {
-        client.query('SELECT * FROM ' + name, function(err, result) {
-          done();
-          var ret = {};
-          if (err){
-            console.error(err); res.send("Error " + err);
-          }
-          else {
-            ret[name] = result.rows;
-            res.send( ret );
-          }
-        });
-      });
-    }
   }
 
   pg.put = function(name, pg, res, req){
