@@ -3,32 +3,29 @@ module.exports = function(app) {
   var postsRouter = express.Router();
 
   postsRouter.get('/', function(req, res) {
-    var db = req.db;
+    var pg = req.pg;
     var query = null;
-    if(req.query.post_id){
-      query = {'user' : req.query.user_id};
-    }
-    db.find('posts', query, db, res);
+    pg.find('posts', req.query, pg, res);
   });
 
   postsRouter.get('/:id?', function(req, res) {
-    var db = req.db;
-    db.findById('post',db, req.params.id, res);
+    var pg = req.pg;
+    pg.findById('posts',pg, req.params.id, res);
   });
 
   postsRouter.post('/', function(req, res) {
-    var db = req.db;
-    db.insertWithSeq('post', db, res, req.body.post);
+    var pg = req.pg;
+    pg.post('posts', pg, res, req.body.post);
   });
 
   postsRouter.delete('/:id', function(req, res) {
-    var db = req.db;
-    db.delete('post', req.params.id, db, res);
+    var pg = req.pg;
+    pg.delete('posts', req.params.id, pg, res);
   });
 
   postsRouter.put('/:id', function(req, res) {
-    var db = req.db;
-    db.put('post', db,  res, req);
+    var pg = req.pg;
+    pg.put('posts', pg,  res, req);
   });
 
   app.use('/api/posts', postsRouter);

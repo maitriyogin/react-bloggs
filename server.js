@@ -2,7 +2,6 @@ var express = require('express');
 var path = require('path');
 var httpProxy = require('http-proxy');
 var http = require('http');
-//var bloggsDomain = require('./server/domain/index.js');
 
 var proxy = httpProxy.createProxyServer({
   changeOrigin: true,
@@ -18,26 +17,11 @@ var publicPath = path.resolve(__dirname, 'dist');
 
 app.use(express.static(publicPath));
 
-app.all('/db/*', function (req, res) {
-  proxy.web(req, res, {
-    target: 'https://glowing-carpet-4534.firebaseio.com/'
-  });
-});
+var api = require('./server/domain/index.js');
 
-var pg = require('pg');
+app.isProduction = isProduction;
 
-var connectionString = isProduction ? process.env.DATABASE_URL : "pg://stephenwhite:5432@localhost/stephenwhite"
-app.get('/api/users', function (req, res) {
-  pg.connect(process.env.DATABASE_URL, function(err, client, done) {
-    client.query('SELECT * FROM users', function(err, result) {
-      done();
-      if (err)
-       { console.error(err); response.send("Error " + err); }
-      else
-       { res.send( {users: result.rows} ); }
-    });
-  });
-})
+api(app);
 
 if (!isProduction) {
 

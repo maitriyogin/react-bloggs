@@ -2,9 +2,9 @@ module.exports = function(app) {
   var express = require('express');
   var dataRouter = express.Router();
 
-  var clean = function(db, message){
+  var clean = function(pg, message){
 
-    db.collection('counters').remove({},function(err, result){
+    pg.collection('counters').remove({},function(err, result){
       var message = "";
       if(err){
         message += "[error while cleaning " + table.name +", error " + err +"],";
@@ -15,7 +15,7 @@ module.exports = function(app) {
     });
 
     data.forEach( function(table){
-      db.collection(table.name).remove({}, function(err, result){
+      pg.collection(table.name).remove({}, function(err, result){
         var message = "";
         if(err){
           message += "[error while cleaning " + table.name +", error " + err +"],";
@@ -26,10 +26,10 @@ module.exports = function(app) {
       });
     });
   };
-  var insertAll = function(db, message){
+  var insertAll = function(pg, message){
 
     data.forEach( function(table){
-      db.collection(table.name).insert(table.data, function(err, result){
+      pg.collection(table.name).insert(table.data, function(err, result){
         var message = "";
         if(err){
           message += "[error while inserting on " + table.name +", error " + err +"],";
@@ -43,7 +43,7 @@ module.exports = function(app) {
         var counterName = table.name+"id";
         console.log('creating counter for : ' + counterName);
         // sequences
-        db.collection("counters").insert(
+        pg.collection("counters").insert(
           {
             _id: counterName,
             seq: 10
@@ -66,19 +66,19 @@ module.exports = function(app) {
     });
   }
   dataRouter.get('/clean', function(req, res) {
-    var db = req.db;
-    clean(db);
+    var pg = req.pg;
+    clean(pg);
     res.send("ok");
   });
   dataRouter.get('/reset', function(req, res) {
-    var db = req.db;
-    clean(db);
-    insertAll(db);
+    var pg = req.pg;
+    clean(pg);
+    insertAll(pg);
     res.send("ok");
   });
   dataRouter.get('/insertAll', function(req, res) {
-    var db = req.db;
-    insertAll(db);
+    var pg = req.pg;
+    insertAll(pg);
     res.send("ok");
   });
   app.use('/api/data', dataRouter);

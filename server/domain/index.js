@@ -1,9 +1,13 @@
 module.exports = function(app) {
   var globSync = require('glob').sync;
   var bodyParser = require('body-parser');
-  var mocks = globSync('./mocks/**/*.js', {cwd: __dirname}).map(require);
+  var api = globSync('./api/**/*.js', {cwd: __dirname}).map(require);
   var proxies = globSync('./proxies/**/*.js', {cwd: __dirname}).map(require);
   var data = globSync('./data/**/*.js', {cwd: __dirname}).map(require);
+
+  var pg = require('pg');
+
+  var connectionString = app.isProduction ? process.env.DATABASE_URL : "pg://stephenwhite:5432@localhost/stephenwhite"
 
   app.use(bodyParser.json());
   app.use(bodyParser.urlencoded({
@@ -11,123 +15,193 @@ module.exports = function(app) {
   }));
 
   // Database
-  var mongo = require('mongoskin');
-  ObjectID = require('mongoskin').ObjectID
-  var db = mongo.db("mongodb://localhost:27017/cadec-2015", {native_parser: true});
 
-  db.getNextSequence = function(name, callback) {
-    console.log("next sequence :" + name);
-    var ret = db.collection('counters').findAndModify(
-      {_id:name},
-      [],
-      {$inc : { seq: 1 }},
-      true,
-      true,
-      callback
-    );
-  };
+  pg.findById = function(name, pg, id, res){
 
-  db.insertWithSeq = function(name, db, res, body) {
-    db.getNextSequence(name + "sid", function(err, counter) {
-      var id = counter.seq;
-      body._id = id + "";
-      db.collection(name + 's').insert(body, function(err, result) {
-        if (result !== null && result.length > 0) {
-          var obj = {};
-          obj[name] = _idToId(result[0]);
-          res.json(obj);
-        } else {
-          var obj = {};
-          obj[name] = '';
-          res.json(obj);
+    pg.connect(connectionString, function(err, client, done) {
+
+      client.query('SELECT * FROM ' + name + ' WHERE _id=' + id, function(err, result) {
+        done();
+        var ret = {};
+        if (err){
+          console.error(err); res.send("Error " + err);
+        }
+        else {
+          ret[name] = result.rows;
+          res.send( ret );
         }
       });
-
     });
   };
 
-  db.findById = function(name, db, id, res){
-    db.collection(name + 's').findById(id, function(err, result) {
-      if(result !== null){
-        var obj ={};
-        obj[name] = _idToId(result);
-        res.json(obj);
-      } else {
-        var obj ={};
-        obj[name] = ''
-        res.send(obj);
-      }
-    });
-  };
-
-  db.find = function(name, query, db, res){
+  pg.find = function(name, query, pg, res){
     if(query){
-      db.collection(name).find(query).toArray(function (err, items) {
-        obj = {};
-        obj[name] = _idToId(items);
-        res.json(obj);
+      var qs = ' WHERE ';
+      // convert query into sql, should be name values
+      console.log('query : ' + JSON.stringify(query, null, 2) );
+      var i = 0;
+      for(var property in query){
+        if(i>0){
+          qs += ', ';
+        }
+        if(isNaN(query[property])) {
+          qs += property + ' LIKE \'%' + query[property] + '%\'';
+        } else {
+          qs += property + '=' + query[property];
+        }
+        i++;
+      }
+      qs = 'SELECT * FROM ' + name + qs;
+      console.log('find : ' + qs);
+      pg.connect(connectionString, function(err, client, done) {
+        try {
+          client.query(qs, function(err, result) {
+            done();
+            var ret = {};
+            if (err) {
+              console.error(err);
+              res.send("Error " + err);
+            }
+            else {
+              ret[name] = result.rows;
+              res.send(ret);
+            }
+          });
+        } catch (err){
+          console.error(err);
+          res.send("Error " + err);
+        }
       });
     } else {
-      db.collection(name).find().toArray(function (err, items) {
-        obj = {};
-        obj[name] = _idToId(items);
-        res.json(obj);
+      pg.connect(connectionString, function(err, client, done) {
+        client.query('SELECT * FROM ' + name, function(err, result) {
+          done();
+          var ret = {};
+          if (err){
+            console.error(err); res.send("Error " + err);
+          }
+          else {
+            ret[name] = result.rows;
+            res.send( ret );
+          }
+        });
       });
     }
   }
 
-  db.put = function(name, db, res, req){
+  pg.put = function(name, pg, res, req){
     if(req.body && req.body[name]){
+
       var payload = req.body[name];
       console.log("payload" + JSON.stringify(payload));
-      if(payload._id){
+      var _id;
+      if(payload._id !== undefined){
+        _id = payload._id;
         delete payload._id;
       }
-      var pluralize = name + 's';
-      db.collection(pluralize).updateById(req.params.id, {$set:payload}, {safe:true, multi:false}, function(e, result){
-        db.findById(name, db, req.params.id, res);
-      })
+      // create update
+      var sets = 'SET ';
+      var i = 0;
+      for (var property in payload) {
+        if (payload.hasOwnProperty(property)) {
+          if(i>0){
+            sets += ','
+          }
+          i++;
+          sets += property + '=' + payload[property];
+        }
+      }
+      var sql = 'UPDATE ' + name + sets + ' WHERE _id=' + _id;
+      pg.connect(connectionString, function(err, client, done) {
+        client.query(sql, function(err, result) {
+          done();
+          var ret = {};
+          if (err){
+            console.error(err); res.send("Error " + err);
+          }
+          else {
+            pg.findById(name, pg, _id, res);
+          }
+        });
+      });
+
     } else {
       var obj = {};
       obj[name] = '';
       res.send(obj);
     }
-  }
+  };
 
-  db.delete = function(name, id,  db, res){
-    db.collection(name + 's').removeById(id, function(err, result) {
-      res.send((result === 1) ? {  } : { msg:'error: ' + err });
-    });
-  }
+  pg.post = function(name, pg, res, req){
+    if(req.body && req.body[name]){
 
-  _idToId = function(objects){
-    if(objects) {
-      var convertId = function(object){
-        if (object._id) {
-          object.id = object._id;
-          delete object._id;
+      var payload = req.body[name];
+      console.log("payload" + JSON.stringify(payload));
+      var _id;
+      if(payload._id !== undefined){
+        _id = payload._id;
+        delete payload._id;
+      }
+      // create update
+      var columns = '(';
+      var values = ' VALUES(';
+      var i = 0;
+      for (var property in payload) {
+        if (payload.hasOwnProperty(property)) {
+          if(i>0){
+            values += ',';
+            columns += ',';
+          }
+          i++;
+          values += payload[property];
+          columns += property;
         }
       }
-      if(objects instanceof Array) {
-        objects.forEach(function(object) {
-          convertId(object);
+      values += ')';
+      columns += ')';
+
+      var sql = 'INSERT INTO ' + COLUMNS + VALUES;
+      pg.connect(connectionString, function(err, client, done) {
+        client.query(sql, function(err, result) {
+          done();
+          var ret = {};
+          if (err){
+            console.error(err); res.send("Error " + err);
+          }
+          else {
+            pg.findById(name, pg, _id, res);
+          }
         });
-        return objects;
-      } else {
-        convertId(objects);
-        return objects;
-      }
+      });
+
     } else {
-      return objects;
+      var obj = {};
+      obj[name] = '';
+      res.send(obj);
     }
   };
 
+  pg.delete = function(name, id,  pg, res){
+    pg.connect(connectionString, function(err, client, done) {
+      client.query('DELETE FROM ' + name + ' WHERE _id=' + id, function(err, result) {
+        done();
+        var ret = {};
+        if (err){
+          console.error(err); res.send("Error " + err);
+        }
+        else {
+          res.send((result === 1) ? {  } : { msg:'error: ' + err });
+        }
+      });
+    });
+  };
+
   app.use(function(req, res, next) {
-    req.db = db;
+    req.pg = pg;
     next();
   });
 
-  mocks.forEach(function(route) {
+  api.forEach(function(route) {
     route(app);
   });
 
